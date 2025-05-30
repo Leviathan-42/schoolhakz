@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Questions - School Hakz</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --text-scale: 1;
+        }
+
+        :root[data-text-size="large"] {
+            --text-scale: 1.2;
+        }
+
+        :root[data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+            --accent-color: #00ff88;
+            --secondary-color: #888;
+            --button-bg: rgba(0, 255, 136, 0.1);
+            --button-hover: rgba(0, 255, 136, 0.2);
+        }
+
+        :root[data-theme="light"] {
+            --bg-color: #f0f0f0;
+            --text-color: #1a1a1a;
+            --accent-color: #008844;
+            --secondary-color: #555;
+            --button-bg: rgba(0, 136, 68, 0.1);
+            --button-hover: rgba(0, 136, 68, 0.2);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+            padding: 2rem;
+        }
+
+        .questions-text {
+            font-size: calc(1.2rem * var(--text-scale));
+            color: var(--secondary-color);
+            text-align: center;
+            max-width: calc(600px * var(--text-scale));
+            line-height: 1.6;
+            margin-bottom: calc(2rem * var(--text-scale));
+        }
+
+        .email {
+            font-size: calc(2rem * var(--text-scale));
+            color: var(--accent-color);
+            margin: calc(2rem * var(--text-scale)) 0;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+        }
+
+        .back-button {
+            padding: calc(1rem * var(--text-scale)) calc(2rem * var(--text-scale));
+            font-size: calc(1.1rem * var(--text-scale));
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 50px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: calc(3rem * var(--text-scale));
+            min-width: calc(200px * var(--text-scale));
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .back-button:hover {
+            background: var(--button-hover);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <h2 class="questions-text">Need help or have questions? Feel free to reach out!</h2>
+    <div class="email">schoolhakz43@gmail.com</div>
+    <p class="questions-text">We're here to help with any inquiries or assistance you might need.</p>
+    <a href="index.html" class="back-button">← Back to Menu</a>
+
+    <script>
+        // Initialize settings from localStorage
+        document.addEventListener('DOMContentLoaded', function() {
+            // Theme initialization
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Text size initialization
+            const largeText = localStorage.getItem('largeText') === 'true';
+            document.documentElement.setAttribute('data-text-size', largeText ? 'large' : 'normal');
+        });
+    </script>
+</body>
+</html> 
