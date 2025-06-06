@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khan Academy</title>
+    <link rel="icon" type="image/png" href="https://cdn.kastatic.org/images/favicon.ico">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --text-scale: 1;
+        }
+
+        :root[data-text-size="large"] {
+            --text-scale: 1.2;
+        }
+
+        :root[data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+            --accent-color: #00ff88;
+            --secondary-color: #888;
+            --button-bg: rgba(0, 255, 136, 0.1);
+            --button-hover: rgba(0, 255, 136, 0.2);
+            --chat-bg: #2a2a2a;
+            --ai-msg-bg: #333;
+            --user-msg-bg: rgba(0, 255, 136, 0.1);
+        }
+
+        :root[data-theme="light"] {
+            --bg-color: #f0f0f0;
+            --text-color: #1a1a1a;
+            --accent-color: #008844;
+            --secondary-color: #555;
+            --button-bg: rgba(0, 136, 68, 0.1);
+            --button-hover: rgba(0, 136, 68, 0.2);
+            --chat-bg: #ffffff;
+            --ai-msg-bg: #f5f5f5;
+            --user-msg-bg: rgba(0, 136, 68, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+        }
+
+        .chat-container {
+            flex: 1;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 1rem;
+            background: var(--chat-bg);
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 4rem);
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .message {
+            padding: 1rem;
+            border-radius: 10px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .ai-message {
+            background: var(--ai-msg-bg);
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+
+        .user-message {
+            background: var(--user-msg-bg);
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--chat-bg);
+            border-top: 2px solid var(--accent-color);
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 1rem;
+            border: 2px solid var(--accent-color);
+            border-radius: 25px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-size: calc(1rem * var(--text-scale));
+            resize: none;
+            min-height: 60px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+        }
+
+        .send-button {
+            padding: 1rem 2rem;
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 25px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+        }
+
+        .send-button:hover {
+            background: var(--button-hover);
+            transform: translateY(-2px);
+        }
+
+        .back-button {
+            position: fixed;
+            bottom: 2rem;
+            left: 2rem;
+            padding: 1rem 2rem;
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 25px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            font-size: calc(1rem * var(--text-scale));
+        }
+
+        .back-button:hover {
+            background: var(--button-hover);
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.2);
+        }
+
+        @media (max-width: 768px) {
+            .chat-container {
+                margin: 0;
+                height: 100vh;
+                border-radius: 0;
+            }
+
+            .back-button {
+                bottom: 1rem;
+                left: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <div id="apiKeyModal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--chat-bg); padding: 2rem; border-radius: 15px; box-shadow: 0 0 20px rgba(0, 0, 0, 0.3); z-index: 1000;">
+            <h2 style="margin-bottom: 1rem;">Enter Your OpenAI API Key (Optional)</h2>
+            <p style="margin-bottom: 1rem;">You can use your own OpenAI API key for potentially faster responses. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--accent-color);">OpenAI's website</a>.</p>
+            <input type="password" id="apiKeyInput" placeholder="sk-..." style="width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 2px solid var(--accent-color); border-radius: 5px; background: var(--bg-color); color: var(--text-color);">
+            <div style="display: flex; gap: 1rem;">
+                <button onclick="saveApiKey()" style="background: var(--accent-color); color: var(--bg-color); padding: 0.5rem 1rem; border: none; border-radius: 5px; cursor: pointer;">Save Key</button>
+                <button onclick="clearApiKey()" style="background: var(--button-bg); color: var(--accent-color); padding: 0.5rem 1rem; border: 2px solid var(--accent-color); border-radius: 5px; cursor: pointer;">Use Default (Groq)</button>
+            </div>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="message ai-message">
+                Hello! I'm your AI assistant powered by Groq. I can help you with:
+                • Writing essays and papers
+                • Answering questions
+                • Explaining concepts
+                • Solving problems
+                • And much more!
+                
+                What would you like help with?
+            </div>
+        </div>
+        <div class="input-container">
+            <textarea class="chat-input" id="userInput" placeholder="Type your message here..." rows="1"></textarea>
+            <button class="send-button" onclick="sendMessage()">Send</button>
+            <button class="settings-button" onclick="showApiKeyModal()" style="margin-left: 1rem; background: var(--button-bg); border: 2px solid var(--accent-color); border-radius: 25px; color: var(--accent-color); cursor: pointer; padding: 1rem; transition: all 0.3s ease;">⚙️</button>
+        </div>
+    </div>
+    <a href="index.html" class="back-button">← Back to Menu</a>
+
+    <script>
+        // Hardcoded Groq API key
+        const GROQ_API_KEY = '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';
+
+        // Initialize settings from localStorage
+        document.addEventListener('DOMContentLoaded', function() {
+            // Theme initialization
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Text size initialization
+            const largeText = localStorage.getItem('largeText') === 'true';
+            document.documentElement.setAttribute('data-text-size', largeText ? 'large' : 'normal');
+
+            // Setup textarea auto-resize
+            const textarea = document.getElementById('userInput');
+            textarea.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = (this.scrollHeight) + 'px';
+            });
+
+            // Setup enter key to send
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // Pre-fill OpenAI key if exists
+            const savedKey = localStorage.getItem('openai_api_key');
+            if (savedKey) {
+                document.getElementById('apiKeyInput').value = savedKey;
+            }
+        });
+
+        // Store conversation history
+        let conversationHistory = [{
+            role: "system",
+            content: "You are a helpful AI assistant. You provide clear, accurate, and engaging responses to any questions or topics. You're knowledgeable across many subjects and can help with various tasks like explanations, analysis, coding, math, and general discussion."
+        }, {
+            role: "assistant",
+            content: "Hello! I'm your AI assistant. I'm here to help you with any questions, tasks, or discussions you'd like to have. What can I help you with today?"
+        }];
+
+        function showApiKeyModal() {
+            document.getElementById('apiKeyModal').style.display = 'block';
+        }
+
+        function saveApiKey() {
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (apiKey && apiKey.startsWith('sk-')) {
+                localStorage.setItem('openai_api_key', apiKey);
+                document.getElementById('apiKeyModal').style.display = 'none';
+            } else {
+                alert('Please enter a valid OpenAI API key starting with "sk-"');
+            }
+        }
+
+        function clearApiKey() {
+            localStorage.removeItem('openai_api_key');
+            document.getElementById('apiKeyInput').value = '';
+            document.getElementById('apiKeyModal').style.display = 'none';
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (message) {
+                addMessage(message, 'user-message');
+                conversationHistory.push({
+                    role: "user",
+                    content: message
+                });
+                
+                input.value = '';
+                input.style.height = 'auto';
+                
+                // Show typing indicator
+                const typingDiv = document.createElement('div');
+                typingDiv.className = 'message ai-message';
+                typingDiv.textContent = 'Writing...';
+                document.getElementById('chatMessages').appendChild(typingDiv);
+                
+                try {
+                    // Check if user has provided OpenAI key
+                    const openAiKey = localStorage.getItem('openai_api_key');
+                    
+                    // Use OpenAI if key exists, otherwise use Groq
+                    const endpoint = openAiKey ? 
+                        'https://api.openai.com/v1/chat/completions' : 
+                        'https://api.groq.com/openai/v1/chat/completions';
+                    
+                    const apiKey = openAiKey || GROQ_API_KEY;
+                    const model = openAiKey ? 'gpt-3.5-turbo' : 'mixtral-8x7b-32768';
+                    
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify({
+                            model: model,
+                            messages: conversationHistory,
+                            max_tokens: 2000,
+                            temperature: 0.7
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    // Add error logging
+                    if (!response.ok) {
+                        console.error('API Error:', data);
+                        throw new Error(data.error?.message || 'API request failed');
+                    }
+                    
+                    // Remove typing indicator
+                    typingDiv.remove();
+                    
+                    if (data.choices && data.choices[0]) {
+                        const aiResponse = data.choices[0].message.content;
+                        addMessage(aiResponse, 'ai-message');
+                        conversationHistory.push({
+                            role: "assistant",
+                            content: aiResponse
+                        });
+                    } else {
+                        console.error('Invalid API response structure:', data);
+                        throw new Error('Invalid API response structure');
+                    }
+                } catch (error) {
+                    // Remove typing indicator
+                    typingDiv.remove();
+                    
+                    // Log the error for debugging
+                    console.error('Error in sendMessage:', error);
+                    
+                    // Show error in chat
+                    const service = localStorage.getItem('openai_api_key') ? 'OpenAI' : 'Groq';
+                    const errorMessage = `There was an error connecting to the ${service} AI service: ${error.message}. Please try again in a few moments.`;
+                    addMessage(errorMessage, 'ai-message');
+                    conversationHistory.push({
+                        role: "assistant",
+                        content: errorMessage
+                    });
+                }
+            }
+        }
+
+        function addMessage(text, className) {
+            const messages = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${className}`;
+            
+            // Convert line breaks to <br> tags and preserve formatting
+            const formattedText = text.replace(/\n/g, '<br>');
+            messageDiv.innerHTML = formattedText;
+            
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+    </script>
+</body>
+</html> 
