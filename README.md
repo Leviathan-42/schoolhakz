@@ -5,6 +5,7 @@ A comprehensive web-based learning platform with AI assistance, educational game
 ## 🚀 **Instant Use - No Setup Required!**
 
 Simply open the website in your web browser and start using the AI assistant immediately!
+https://leviathan-42.github.io/schoolhakz/index.html
 
 ## Features
 
