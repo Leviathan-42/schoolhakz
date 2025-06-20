@@ -4,7 +4,7 @@ A comprehensive web-based learning platform with AI assistance, educational game
 
 ## 🚀 **Instant Use - No Setup Required!**
 
-Simply open `index.html` in your web browser and start using the AI assistant immediately. The AI is powered by Poe's Claude 3.5 Sonnet and works perfectly out of the box!
+Simply open `index.html` in your web browser and start using the AI assistant immediately!
 
 ## Features
 
@@ -24,14 +24,7 @@ The AI assistant can help you with:
 - **History facts** and analysis
 - **English grammar** and writing
 - **Homework guidance** and explanations
-- **General questions** and learning support
-
-## How to Use
-
-1. **Open the website** - Just double-click `index.html`
-2. **Click "AI Assistant"** - Start chatting immediately
-3. **Ask questions** - The AI is ready to help!
-4. **No setup needed** - Works right away
+- **General questions** and learning 
 
 ## Privacy
 
