@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Proxy</title>
+    <style>
+        :root { --text-scale: 1; }
+        :root[data-text-size="large"] { --text-scale: 1.2; }
+        :root[data-theme="dark"] {
+            --bg-color: #1a1a1a; --text-color: #ffffff; --accent-color: #00ff88;
+            --secondary-color: #888; --input-bg: #2a2a2a; --button-bg: rgba(0, 255, 136, 0.1);
+        }
+        :root[data-theme="light"] {
+            --bg-color: #f0f0f0; --text-color: #1a1a1a; --accent-color: #008844;
+            --secondary-color: #555; --input-bg: #ffffff; --button-bg: rgba(0, 136, 68, 0.1);
+        }
+        body {
+            margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: flex-start;
+            align-items: center; min-height: 100vh; background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+        }
+        #proxy-container { width: 100%; padding: 2rem; text-align: center; box-sizing: border-box; }
+        h1 { font-size: calc(3rem * var(--text-scale)); color: var(--accent-color); margin-bottom: 2rem; }
+        #proxy-form { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 2rem; }
+        #url-input {
+            width: 100%; max-width: 600px; padding: 1rem; font-size: 1.1rem;
+            border: 2px solid var(--accent-color); background-color: var(--input-bg);
+            color: var(--text-color); border-radius: 10px;
+        }
+        #proxy-button {
+            padding: 1rem 2rem; font-size: 1.1rem; background: var(--accent-color);
+            color: var(--bg-color); border: none; border-radius: 10px; cursor: pointer;
+        }
+        #proxy-frame { width: 100%; height: 100vh; border: none; }
+        .hidden { display: none; }
+        @media (max-width: 768px) {
+            #proxy-form { flex-direction: column; }
+            #url-input { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div id="proxy-container">
+        <h1>Web Proxy</h1>
+        <form id="proxy-form">
+            <input id="url-input" type="text" placeholder="Enter website URL (e.g., google.com)" required>
+            <button id="proxy-button" type="submit">Go</button>
+        </form>
+    </div>
+    <iframe class="hidden" id="proxy-frame"></iframe>
+
+    <script src="uv/uv.config.js"></script>
+    <script src="uv/uv.bundle.js"></script>
+    <script>
+    // Fallback config
+    if (typeof __uv$config === 'undefined') {
+        window.__uv$config = {
+            prefix: '/service/',
+            bare: 'https://bare.benrogo.net/',
+            encodeUrl: (str) => btoa(str),
+            decodeUrl: (str) => atob(str),
+            handler: '/uv/uv.handler.js',
+            client: '/uv/uv.client.js',
+            bundle: '/uv/uv.bundle.js',
+            config: '/uv/uv.config.js',
+            sw: '/uv/uv.sw.js',
+        };
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('proxy-form');
+        const input = document.getElementById('url-input');
+        const iframe = document.getElementById('proxy-frame');
+        const container = document.getElementById('proxy-container');
+
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            try {
+                await registerSW();
+                let url = input.value.trim();
+                
+                // Add protocol if missing
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
+                
+                container.classList.add('hidden');
+                iframe.classList.remove('hidden');
+                iframe.src = __uv$config.prefix + __uv$config.encodeUrl(url);
+            } catch (err) {
+                alert('Error: ' + err.message);
+                console.error(err);
+            }
+        });
+
+        async function registerSW() {
+            if (!('serviceWorker' in navigator)) {
+                throw new Error('Service workers are not supported.');
+            }
+            await navigator.serviceWorker.register('./sw.js', {
+                scope: '/schoolhakz/service/',
+            });
+        }
+    });
+    </script>
+</body>
+</html>
