@@ -6,6 +6,7 @@
     <title>Web Proxy</title>
     <link rel="icon" type="image/png" href="https://cdn.kastatic.org/images/favicon.ico">
     <style>
+        /* Your existing CSS for theme, sizing, etc. */
         :root { --text-scale: 1; }
         :root[data-text-size="large"] { --text-scale: 1.2; }
         :root[data-theme="dark"] {
@@ -23,11 +24,11 @@
             transition: background-color 0.3s ease, color 0.3s ease;
             font-size: calc(1rem * var(--text-scale));
         }
-        #proxy-container { width: 100%; max-width: 700px; padding: 2rem; text-align: center; box-sizing: border-box; }
-        h1 { font-size: calc(3rem * var(--text-scale)); color: var(--accent-color); }
-        #proxy-form { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-top: 1.5rem; }
+        #proxy-container { width: 100%; padding: 2rem; text-align: center; box-sizing: border-box; }
+        h1 { font-size: calc(3rem * var(--text-scale)); color: var(--accent-color); margin-bottom: 2rem; }
+        #proxy-form { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 2rem; }
         #url-input {
-            width: 100%; padding: 1rem; font-size: 1.1rem;
+            width: 100%; max-width: 600px; padding: 1rem; font-size: 1.1rem;
             border: 2px solid var(--accent-color); background-color: var(--input-bg);
             color: var(--text-color); border-radius: 10px;
         }
@@ -35,84 +36,81 @@
             padding: 1rem 2rem; font-size: 1.1rem; background: var(--accent-color);
             color: var(--bg-color); border: none; border-radius: 10px; cursor: pointer;
         }
+        /* No #proxy-frame or .hidden needed if always opening in new tab */
         .back-button {
-            position: fixed; bottom: 2rem; left: 2rem; padding: 1rem 2rem;
-            font-size: 1rem; background: var(--button-bg); border: 2px solid var(--accent-color);
-            border-radius: 50px; color: var(--accent-color); cursor: pointer;
-            transition: all 0.3s ease; text-decoration: none; z-index: 1000;
+            position: fixed;
+            bottom: 2rem;
+            left: 2rem;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 50px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            z-index: 1000;
         }
-        .back-button:hover { background: var(--button-hover); }
-        @media (max-width: 768px) { #proxy-form { flex-direction: column; } }
+        .back-button:hover {
+            background: var(--button-hover);
+        }
+        @media (max-width: 768px) {
+            #proxy-form { flex-direction: column; }
+            #url-input { max-width: 100%; }
+        }
     </style>
 </head>
 <body>
     <a href="index.html" class="back-button">← Back to Menu</a>
     <div id="proxy-container">
         <h1>Web Proxy</h1>
-        <p style="color: var(--secondary-color);">Enter a URL to open it directly in a new tab.</p>
         <form id="proxy-form">
-            <input id="url-input" type="text" placeholder="Search or type a URL">
+            <input id="url-input" type="text" placeholder="Enter website URL (e.g., google.com)" required>
             <button id="proxy-button" type="submit">Go</button>
         </form>
+        <!-- Removed "Open in new tab" toggle as it will always open in new tab -->
     </div>
+    <!-- Removed iframe as it will always open in new tab -->
 
     <script>
-    // This script remains to ensure settings are applied and the proxy form works.
-    document.addEventListener('DOMContentLoaded', function() {
-        // Apply user settings from localStorage
-        const savedTheme = localStorage.getItem('theme') || 'dark';
-        document.documentElement.setAttribute('data-theme', savedTheme);
-        const largeText = localStorage.getItem('largeText') === 'true';
-        document.documentElement.setAttribute('data-text-size', largeText ? 'large' : 'normal');
-        const reduceMotion = localStorage.getItem('reduceMotion') === 'true';
-        document.documentElement.setAttribute('data-motion', reduceMotion ? 'reduced' : 'normal');
+        document.addEventListener('DOMContentLoaded', function() {
+            // Theme initialization and other settings (copy from your other pages)
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            const largeText = localStorage.getItem('largeText') === 'true';
+            document.documentElement.setAttribute('data-text-size', largeText ? 'large' : 'normal');
+            const reduceMotion = localStorage.getItem('reduceMotion') === 'true';
+            document.documentElement.setAttribute('data-motion', reduceMotion ? 'reduced' : 'normal');
 
-        // Proxy form logic
-        const form = document.getElementById('proxy-form');
-        const input = document.getElementById('url-input');
+            const form = document.getElementById('proxy-form');
+            const input = document.getElementById('url-input');
 
-        form.addEventListener('submit', async event => {
-            event.preventDefault();
-            try {
-                // Register the service worker with the correct scope
-                await registerSW();
+            form.addEventListener('submit', event => {
+                event.preventDefault();
+                let url = input.value.trim();
+                
+                if (!url) return;
+                
+                // Add protocol if missing
+                if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                    url = 'https://' + url;
+                }
 
-                // We need to define __uv$config here because the config script was removed.
-                const __uv$config = {
-                    prefix: '/schoolhakz/service/',
-                    encodeUrl: (str) => btoa(str),
-                };
+                // This is the BARE SERVER URL.
+                // This is the server that will do the actual unblocking.
+                // If this one gets blocked, you'll need to find another public one or host your own.
+                const BARE_SERVER_URL = 'https://bare.benrogo.net/v1/'; 
+                // Note: some bare servers might need an /v1/ or /bare/ suffix.
+                // benrogo.net's Baremux API uses /v1/ as its endpoint for the proxy.
+                // You can test the Bare Server directly in your browser: https://bare.benrogo.net/v1/https://google.com
 
-                const url = search(input.value);
-                const proxiedUrl = __uv$config.prefix + __uv$config.encodeUrl(url);
+                const proxiedUrl = BARE_SERVER_URL + encodeURIComponent(url);
+                
+                // ALWAYS open in a new tab
                 window.open(proxiedUrl, '_blank');
-            } catch (err) {
-                alert('Error: ' + err.message);
-                console.error(err);
-            }
-        });
-
-        function search(input) {
-            try {
-                return new URL(input).toString();
-            } catch (err) {}
-            try {
-                const url = new URL(`https://${input}`);
-                if (url.hostname.includes('.')) return url.toString();
-            } catch (err) {}
-            return `https://www.google.com/search?q=${encodeURIComponent(input)}`;
-        }
-
-        async function registerSW() {
-            if (!('serviceWorker' in navigator)) {
-                throw new Error('Service workers are not supported.');
-            }
-            // Register the service worker at the base path scope
-            await navigator.serviceWorker.register('/schoolhakz/sw.js', {
-                scope: '/schoolhakz/',
             });
-        }
-    });
+        });
     </script>
 </body>
 </html>
