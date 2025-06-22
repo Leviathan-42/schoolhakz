@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Group Messaging</title>
+    <link rel="icon" type="image/png" href="https://cdn.kastatic.org/images/favicon.ico">
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --text-scale: 1;
+        }
+
+        :root[data-text-size="large"] {
+            --text-scale: 1.2;
+        }
+
+        :root[data-theme="dark"] {
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+            --accent-color: #00ff88;
+            --secondary-color: #888;
+            --button-bg: rgba(0, 255, 136, 0.1);
+            --button-hover: rgba(0, 255, 136, 0.2);
+            --sidebar-bg: #2a2a2a;
+            --chat-bg: #1e1e1e;
+            --message-bg: #333;
+            --input-bg: #2a2a2a;
+        }
+
+        :root[data-theme="light"] {
+            --bg-color: #f0f0f0;
+            --text-color: #1a1a1a;
+            --accent-color: #008844;
+            --secondary-color: #555;
+            --button-bg: rgba(0, 136, 68, 0.1);
+            --button-hover: rgba(0, 136, 68, 0.2);
+            --sidebar-bg: #e0e0e0;
+            --chat-bg: #ffffff;
+            --message-bg: #f5f5f5;
+            --input-bg: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+            overflow: hidden;
+        }
+
+        .messaging-container {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Left Sidebar - Servers */
+        .servers-sidebar {
+            width: calc(80px * var(--text-scale));
+            background: var(--sidebar-bg);
+            border-right: 2px solid var(--accent-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: calc(1rem * var(--text-scale)) 0;
+            gap: calc(0.5rem * var(--text-scale));
+        }
+
+        .server-icon {
+            width: calc(50px * var(--text-scale));
+            height: calc(50px * var(--text-scale));
+            border-radius: 50%;
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(1.2rem * var(--text-scale));
+            color: var(--accent-color);
+        }
+
+        .server-icon:hover {
+            background: var(--button-hover);
+            transform: scale(1.1);
+        }
+
+        .server-icon.active {
+            background: var(--accent-color);
+            color: var(--bg-color);
+        }
+
+        .add-server {
+            width: calc(50px * var(--text-scale));
+            height: calc(50px * var(--text-scale));
+            border-radius: 50%;
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(1.5rem * var(--text-scale));
+            color: var(--accent-color);
+        }
+
+        .add-server:hover {
+            background: var(--button-hover);
+            transform: scale(1.1);
+        }
+
+        .server-item-container {
+            position: relative;
+        }
+
+        .server-actions-dropdown {
+            display: none;
+            position: absolute;
+            right: -120px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: var(--bg-color);
+            border: 1px solid var(--accent-color);
+            border-radius: 8px;
+            padding: 0.5rem;
+            z-index: 1000;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            min-width: 100px;
+        }
+        
+        .server-item-container:hover .server-actions-dropdown,
+        .server-actions-dropdown:hover {
+            display: block;
+        }
+
+        .server-actions-dropdown button {
+            display: block;
+            background: none;
+            border: none;
+            color: var(--text-color);
+            padding: 0.5rem 1rem;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .server-actions-dropdown button:hover {
+            background-color: var(--button-hover);
+        }
+
+        /* Main Chat Area */
+        .chat-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: var(--sidebar-bg);
+            padding: calc(1rem * var(--text-scale));
+            border-bottom: 2px solid var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .server-name {
+            font-size: calc(1.3rem * var(--text-scale));
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+
+        .online-count {
+            font-size: calc(0.9rem * var(--text-scale));
+            color: var(--secondary-color);
+        }
+
+        .messages-container {
+            flex: 1;
+            background: var(--chat-bg);
+            overflow-y: auto;
+            padding: calc(1rem * var(--text-scale));
+        }
+
+        .message {
+            background: var(--message-bg);
+            padding: calc(0.8rem * var(--text-scale));
+            margin-bottom: calc(0.8rem * var(--text-scale));
+            border-radius: 10px;
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: calc(0.3rem * var(--text-scale));
+        }
+
+        .message-author {
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-right: calc(0.5rem * var(--text-scale));
+        }
+
+        .message-time {
+            font-size: calc(0.8rem * var(--text-scale));
+            color: var(--secondary-color);
+        }
+
+        .message-content {
+            line-height: 1.4;
+        }
+
+        .message-input-container {
+            background: var(--sidebar-bg);
+            padding: calc(1rem * var(--text-scale));
+            border-top: 2px solid var(--accent-color);
+            display: flex;
+            gap: calc(0.5rem * var(--text-scale));
+        }
+
+        .message-input {
+            flex: 1;
+            padding: calc(0.8rem * var(--text-scale));
+            background: var(--input-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 25px;
+            color: var(--text-color);
+            font-size: calc(1rem * var(--text-scale));
+            resize: none;
+        }
+
+        .message-input:focus {
+            outline: none;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+        }
+
+        .send-button {
+            padding: calc(0.8rem * var(--text-scale)) calc(1.5rem * var(--text-scale));
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 25px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+            background-position: center;
+        }
+
+        .send-button:hover {
+            background: var(--button-hover);
+            transform: translateY(-2px);
+        }
+
+        /* Right Sidebar - Friends */
+        .friends-sidebar {
+            width: calc(250px * var(--text-scale));
+            background: var(--sidebar-bg);
+            border-left: 2px solid var(--accent-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-profile-section {
+            padding: calc(1rem * var(--text-scale));
+            border-bottom: 2px solid var(--accent-color);
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .user-profile-section:hover {
+            background: var(--button-bg);
+        }
+
+        .user-avatar {
+            width: calc(50px * var(--text-scale));
+            height: calc(50px * var(--text-scale));
+            border-radius: 50%;
+            background: var(--accent-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto calc(0.5rem * var(--text-scale));
+            font-size: calc(1.5rem * var(--text-scale));
+            color: var(--bg-color);
+            font-weight: bold;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            cursor: pointer;
+        }
+
+        .user-name {
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-bottom: calc(0.2rem * var(--text-scale));
+        }
+
+        .user-code {
+            font-size: calc(0.8rem * var(--text-scale));
+            color: var(--secondary-color);
+        }
+
+        .friends-header {
+            padding: calc(1rem * var(--text-scale));
+            border-bottom: 2px solid var(--accent-color);
+            text-align: center;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .friends-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: calc(0.5rem * var(--text-scale));
+        }
+
+        .friend-item {
+            padding: calc(0.8rem * var(--text-scale));
+            margin-bottom: calc(0.5rem * var(--text-scale));
+            background: var(--message-bg);
+            border-radius: 10px;
+            border: 1px solid var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .friend-item:hover {
+            background: var(--button-bg);
+            transform: translateX(-5px);
+        }
+
+        .friend-info {
+            flex-grow: 1;
+        }
+
+        .friend-actions {
+            position: relative;
+        }
+
+        .action-button {
+            background: none;
+            border: none;
+            color: var(--secondary-color);
+            font-size: calc(1.3rem * var(--text-scale));
+            cursor: pointer;
+            padding: 5px;
+        }
+        .action-button:hover {
+            color: var(--accent-color);
+        }
+
+        .action-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 5px;
+            background-color: var(--bg-color);
+            border: 1px solid var(--accent-color);
+            border-radius: 8px;
+            padding: calc(0.5rem * var(--text-scale));
+            z-index: 10;
+            flex-direction: column;
+            gap: calc(0.5rem * var(--text-scale));
+        }
+
+        .friend-actions:hover .action-dropdown,
+        .action-dropdown:hover {
+            display: flex;
+        }
+
+        .action-dropdown.show {
+            display: flex;
+        }
+
+        .dropdown-button {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: calc(1.3rem * var(--text-scale));
+            cursor: pointer;
+            padding: 5px;
+            transition: transform 0.2s ease;
+        }
+        .dropdown-button:hover {
+            transform: scale(1.1);
+        }
+
+        .friend-name {
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-bottom: calc(0.2rem * var(--text-scale));
+        }
+
+        .friend-code {
+            font-size: calc(0.8rem * var(--text-scale));
+            color: var(--secondary-color);
+        }
+
+        .add-friend-section {
+            padding: calc(1rem * var(--text-scale));
+            border-top: 2px solid var(--accent-color);
+        }
+
+        .add-friend-input {
+            width: 100%;
+            padding: calc(0.5rem * var(--text-scale));
+            background: var(--input-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 10px;
+            color: var(--text-color);
+            font-size: calc(0.9rem * var(--text-scale));
+            margin-bottom: calc(0.5rem * var(--text-scale));
+        }
+
+        .add-friend-button {
+            width: 100%;
+            padding: calc(0.5rem * var(--text-scale));
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 10px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(0.9rem * var(--text-scale));
+        }
+
+        .add-friend-button:hover {
+            background: var(--button-hover);
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: var(--bg-color);
+            padding: calc(2rem * var(--text-scale));
+            border-radius: 15px;
+            border: 2px solid var(--accent-color);
+            max-width: calc(400px * var(--text-scale));
+            width: 90%;
+        }
+
+        .modal-title {
+            font-size: calc(1.5rem * var(--text-scale));
+            color: var(--accent-color);
+            margin-bottom: calc(1rem * var(--text-scale));
+            text-align: center;
+        }
+
+        .modal-input {
+            width: 100%;
+            padding: calc(0.8rem * var(--text-scale));
+            background: var(--input-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 10px;
+            color: var(--text-color);
+            font-size: calc(1rem * var(--text-scale));
+            margin-bottom: calc(1rem * var(--text-scale));
+        }
+
+        .modal-button {
+            padding: calc(0.8rem * var(--text-scale)) calc(1.5rem * var(--text-scale));
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            border-radius: 25px;
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(1rem * var(--text-scale));
+            margin: calc(0.3rem * var(--text-scale));
+        }
+
+        .modal-button:hover {
+            background: var(--button-hover);
+            transform: translateY(-2px);
+        }
+
+        .back-button {
+            position: fixed;
+            bottom: calc(1rem * var(--text-scale));
+            left: calc(1rem * var(--text-scale));
+            width: calc(50px * var(--text-scale));
+            height: calc(50px * var(--text-scale));
+            border-radius: 50%;
+            background: var(--button-bg);
+            border: 2px solid var(--accent-color);
+            color: var(--accent-color);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: calc(1.5rem * var(--text-scale));
+            text-decoration: none;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .back-button:hover {
+            background: var(--button-hover);
+            transform: translateY(-2px);
+        }
+
+        .back-button::before {
+            content: "←";
+            font-weight: bold;
+        }
+
+        .back-button::after {
+            content: "Back to Menu";
+            position: absolute;
+            left: calc(60px * var(--text-scale));
+            background: var(--bg-color);
+            color: var(--text-color);
+            padding: calc(0.5rem * var(--text-scale)) calc(0.8rem * var(--text-scale));
+            border-radius: 8px;
+            border: 1px solid var(--accent-color);
+            font-size: calc(0.8rem * var(--text-scale));
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+
+        .back-button:hover::after {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        :root[data-motion="reduced"] * {
+            transition-duration: 0.001s !important;
+            animation-duration: 0.001s !important;
+            animation-iteration-count: 1 !important;
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .message-author-avatar {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 10px;
+            background: var(--accent-color);
+            color: var(--bg-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            background-size: cover;
+            background-position: center;
+        }
+
+        #modalAvatar {
+            position: relative;
+        }
+
+        .avatar-initial {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Video Call Styles */
+        #callContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.9);
+            z-index: 2000;
+            display: none; /* Hidden by default */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #remoteVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #localVideo {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 20%;
+            max-width: 250px;
+            border: 3px solid var(--accent-color);
+            border-radius: 10px;
+        }
+
+        .call-actions {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+        }
+
+        .call-action-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: none;
+            cursor: pointer;
+            font-size: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        #hangup-button {
+            background-color: #ff4d4d;
+            color: white;
+        }
+        #hangup-button:hover {
+            background-color: #e60000;
+        }
+
+        #mute-button.muted, #video-button.off {
+            background-color: #aaa;
+            color: #fff;
+        }
+
+        .control-button-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .call-action-button {
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        
+        .control-arrow {
+            width: 25px;
+            height: 60px;
+            background-color: var(--button-bg);
+            color: var(--accent-color);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-top-right-radius: 30px;
+            border-bottom-right-radius: 30px;
+            border-left: 1px solid var(--accent-color);
+            font-size: 1.2rem;
+            padding-bottom: 5px;
+        }
+        .control-arrow:hover {
+            background-color: var(--button-hover);
+        }
+
+        .device-menu {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            margin-bottom: 10px;
+            background-color: var(--sidebar-bg);
+            border-radius: 8px;
+            border: 1px solid var(--accent-color);
+            z-index: 10;
+            padding: 0.5rem;
+            min-width: 200px;
+        }
+        .device-menu button {
+            display: block;
+            width: 100%;
+            padding: 0.5rem;
+            background: none;
+            border: none;
+            color: var(--text-color);
+            text-align: left;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .device-menu button:hover {
+            background-color: var(--button-hover);
+        }
+
+        #incomingCallModal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: var(--sidebar-bg);
+            padding: 2rem;
+            border-radius: 20px;
+            border: 3px solid var(--accent-color);
+            z-index: 2001;
+            display: none; /* Hidden by default */
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            min-width: 300px;
+            animation: incomingCallPulse 2s infinite;
+        }
+
+        @keyframes incomingCallPulse {
+            0% { box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 0 0 rgba(0, 255, 136, 0.7); }
+            70% { box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 0 20px rgba(0, 255, 136, 0); }
+            100% { box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 0 0 rgba(0, 255, 136, 0); }
+        }
+
+        #incomingCallText {
+            margin-bottom: 1.5rem;
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .incoming-call-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+        }
+
+        .incoming-call-actions button {
+            padding: 0.8rem 1.5rem;
+            border-radius: 25px;
+            border: 2px solid;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 1rem;
+            font-weight: bold;
+            min-width: 100px;
+        }
+
+        .incoming-call-actions button:first-child {
+            background-color: #00ff88;
+            color: #1a1a1a;
+            border-color: #00ff88;
+        }
+
+        .incoming-call-actions button:first-child:hover {
+            background-color: #00cc6a;
+            border-color: #00cc6a;
+            transform: translateY(-2px);
+        }
+
+        .incoming-call-actions button:last-child {
+            background-color: #ff4d4d;
+            color: white;
+            border-color: #ff4d4d;
+        }
+
+        .incoming-call-actions button:last-child:hover {
+            background-color: #e60000;
+            border-color: #e60000;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+
+<body>
+    <a href="index.html" class="back-button" title="Back to Menu"></a>
+
+    <div class="messaging-container">
+        <!-- Left Sidebar - Servers -->
+        <div class="servers-sidebar">
+            <div class="add-server" onclick="showCreateServerModal()" title="Create Server">+</div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="chat-area">
+            <div class="chat-header">
+                <div class="server-name">Global Server</div>
+                <div class="online-count">Online: <span id="onlineCount">1</span></div>
+            </div>
+            
+            <div class="messages-container" id="messagesContainer">
+                <div class="message">
+                    <div class="message-header">
+                        <span class="message-author">System</span>
+                        <span class="message-time">Just now</span>
+                    </div>
+                    <div class="message-content">Welcome to the Global Server! This is where everyone starts. You can create your own servers or add friends using their friend codes.</div>
+                </div>
+            </div>
+            
+            <div class="message-input-container">
+                <textarea class="message-input" id="messageInput" placeholder="Type your message..." rows="1"></textarea>
+                <button class="send-button" onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Friends -->
+        <div class="friends-sidebar">
+            <div class="user-profile-section" onclick="showProfile()">
+                <div class="user-avatar" id="sidebarAvatar">
+                    <span class="avatar-initial">L</span>
+                </div>
+                <div class="user-name" id="sidebarUsername">User Name</div>
+                <div class="user-code" id="sidebarUserCode">Code: 12345</div>
+            </div>
+            <div class="friends-header">Friends</div>
+            <div class="friends-list" id="friendsList">
+                <!-- Friends will be populated here -->
+            </div>
+            <div class="add-friend-section">
+                <input type="text" class="add-friend-input" id="friendCodeInput" placeholder="Enter friend code">
+                <button class="add-friend-button" onclick="addFriend()">Add Friend</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leave Global Server Modal -->
+    <div class="modal" id="leaveGlobalModal">
+        <div class="modal-content">
+            <div class="modal-title">Leave Global Server?</div>
+            <div style="text-align: center; margin-bottom: 1rem; color: var(--secondary-color);">
+                Are you sure you want to leave the Global Server? You can always rejoin later.
+            </div>
+            <div style="text-align: center;">
+                <button class="modal-button" onclick="leaveGlobalServer()">Leave Server</button>
+                <button class="modal-button" onclick="closeModal('leaveGlobalModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Profile Modal -->
+    <div class="modal" id="profileModal">
+        <div class="modal-content">
+            <div class="modal-title">Your Profile</div>
+            <div style="text-align: center; margin-bottom: 1rem;">
+                <div class="user-avatar" id="modalAvatar" style="margin: 0 auto 1rem;">
+                    <span class="avatar-initial">L</span>
+                </div>
+                <div class="user-name" id="profileUsername">Username</div>
+                <div class="user-code" id="profileUserCode">Code: 123456</div>
+            </div>
+            <div style="text-align: center;">
+                <button class="modal-button" onclick="closeModal('profileModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Setup Modal -->
+    <div class="modal" id="setupProfileModal">
+        <div class="modal-content">
+            <div class="modal-title">Create Your Profile</div>
+            <input type="text" class="modal-input" id="usernameInput" placeholder="Enter your username">
+            <div style="text-align: center;">
+                <button class="modal-button" onclick="createProfile()">Create Profile</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Server Modal -->
+    <div class="modal" id="createServerModal">
+        <div class="modal-content">
+            <div class="modal-title">Create New Server</div>
+            <input type="text" class="modal-input" id="serverNameInput" placeholder="Enter server name">
+            <div style="text-align: center;">
+                <button class="modal-button" onclick="createServer()">Create Server</button>
+                <button class="modal-button" onclick="closeModal('createServerModal')">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Video Call Container -->
+    <div id="callContainer">
+        <video id="remoteVideo" autoplay playsinline></video>
+        <video id="localVideo" autoplay playsinline muted></video>
+        <div class="call-actions">
+            <div class="control-button-wrapper">
+                <button id="mute-button" class="call-action-button" onclick="toggleMute()">🎤</button>
+                <div class="control-arrow" onclick="toggleDeviceMenu('audio')">^</div>
+                <div id="audio-device-menu" class="device-menu"></div>
+            </div>
+            <div class="control-button-wrapper">
+                <button id="video-button" class="call-action-button" onclick="toggleVideo()">📹</button>
+                <div class="control-arrow" onclick="toggleDeviceMenu('video')">^</div>
+                <div id="video-device-menu" class="device-menu"></div>
+            </div>
+            <button id="hangup-button" class="call-action-button" onclick="hangUp()">📞</button>
+        </div>
+    </div>
+
+    <!-- Incoming Call Modal -->
+    <div id="incomingCallModal">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📞</div>
+        <div id="incomingCallText">Incoming call...</div>
+        <div class="incoming-call-actions">
+            <button onclick="answerCall()">✅ Accept</button>
+            <button onclick="rejectCall()">❌ Decline</button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize settings from localStorage
+        document.addEventListener('DOMContentLoaded', function() {
+            // Theme initialization
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+
+            // Text size initialization
+            const largeText = localStorage.getItem('largeText') === 'true';
+            document.documentElement.setAttribute('data-text-size', largeText ? 'large' : 'normal');
+
+            // Reduce motion initialization
+            const reduceMotion = localStorage.getItem('reduceMotion') === 'true';
+            document.documentElement.setAttribute('data-motion', reduceMotion ? 'reduced' : 'normal');
+
+            // Check if user has a profile
+            checkProfile();
+        });
+
+        // User data
+        let currentUser = null;
+        let servers = [];
+        let friends = [];
+        let currentServer = 'global';
+        let messageListener = null; // For real-time message listening
+
+        // WebRTC variables
+        let localStream;
+        let remoteStream;
+        let peerConnection;
+        let signalingChannel; // Will use Firebase Realtime DB
+        let currentFriendId = null;
+
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        function checkProfile() {
+            const savedUser = localStorage.getItem('messagingUser');
+            if (!savedUser) {
+                showModal('setupProfileModal');
+            } else {
+                currentUser = JSON.parse(savedUser);
+                loadUserData();
+            }
+        }
+
+        function createProfile() {
+            const username = document.getElementById('usernameInput').value.trim();
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+
+            const friendCode = generateFriendCode();
+            currentUser = {
+                username: username,
+                friendCode: friendCode,
+                id: Date.now().toString()
+            };
+
+            localStorage.setItem('messagingUser', JSON.stringify(currentUser));
+            closeModal('setupProfileModal');
+            loadUserData();
+
+            // Save user to Firebase
+            saveUserToFirebase(currentUser);
+
+            // Show friend code to user
+            alert(`Your friend code is: ${friendCode}\nShare this with your friends so they can add you!`);
+        }
+
+        function saveUserToFirebase(user) {
+            db.collection('users').doc(user.id).set({
+                username: user.username,
+                friendCode: user.friendCode,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            }).catch(error => {
+                console.error('Error saving user:', error);
+            });
+        }
+
+        function generateFriendCode() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+
+        function loadUserData() {
+            // Make sure user is part of the global server, then load data
+            ensureGlobalServerMembership().then(() => {
+                // Load servers from Firebase
+                loadServersFromFirebase();
+                
+                // Load friends from Firebase
+                loadFriendsFromFirebase();
+                
+                updateUserProfile();
+            });
+        }
+
+        function ensureGlobalServerMembership() {
+            const globalServerRef = db.collection('servers').doc('global');
+            return db.runTransaction(transaction => {
+                return transaction.get(globalServerRef).then(serverDoc => {
+                    if (!serverDoc.exists) {
+                        // If it doesn't exist, create it with the current user
+                        transaction.set(globalServerRef, {
+                            name: 'Global Server',
+                            icon: '🌍',
+                            members: [currentUser.id],
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                    } else {
+                        // If it exists, add the current user to its members list
+                        transaction.update(globalServerRef, {
+                            members: firebase.firestore.FieldValue.arrayUnion(currentUser.id)
+                        });
+                    }
+                });
+            }).catch(error => {
+                console.error("Error ensuring global server membership:", error);
+            });
+        }
+
+        function loadServersFromFirebase() {
+            if (!currentUser || !currentUser.id) {
+                console.log("Cannot load servers, no current user.");
+                return;
+            }
+
+            db.collection('servers').where('members', 'array-contains', currentUser.id)
+              .get()
+              .then((querySnapshot) => {
+                const rawServers = [];
+                querySnapshot.forEach((doc) => {
+                    const server = doc.data();
+                    server.id = doc.id;
+                    rawServers.push(server);
+                });
+
+                // Clear existing servers array
+                servers = [];
+                
+                // Find the one true global server (by ID, not name)
+                const globalServer = rawServers.find(s => s.id === 'global');
+                if (globalServer) {
+                    servers.push(globalServer);
+                }
+                
+                // Add all other servers (excluding any that might have "Global Server" as name but different ID)
+                const otherServers = rawServers.filter(s => s.id !== 'global');
+                servers = servers.concat(otherServers);
+                
+                updateServersList();
+                updateOnlineCount();
+                
+                // Set the initial server to 'global' and load its messages
+                if (currentServer === 'global' || !servers.some(s => s.id === currentServer)) {
+                    currentServer = 'global';
+                    loadServerMessages('global');
+                }
+            }).catch(error => {
+                console.error('Error loading servers:', error);
+                // Fallback to localStorage
+                loadServersFromLocalStorage();
+            });
+        }
+
+        function loadServersFromLocalStorage() {
+            const savedServers = localStorage.getItem('messagingServers');
+            if (savedServers) {
+                servers = JSON.parse(savedServers);
+            } else {
+                servers = [{
+                    id: 'global',
+                    name: 'Global Server',
+                    icon: '🌍',
+                    members: [currentUser.id]
+                }];
+                localStorage.setItem('messagingServers', JSON.stringify(servers));
+            }
+            updateServersList();
+            updateOnlineCount();
+        }
+
+        function loadFriendsFromFirebase() {
+            db.collection('users').where('friendCode', 'in', currentUser.friendCode ? [currentUser.friendCode] : []).get().then((querySnapshot) => {
+                friends = [];
+                querySnapshot.forEach((doc) => {
+                    const friend = doc.data();
+                    friend.id = doc.id;
+                    friends.push(friend);
+                });
+                updateFriendsList();
+            }).catch(error => {
+                console.error('Error loading friends:', error);
+                // Fallback to localStorage
+                loadFriendsFromLocalStorage();
+            });
+        }
+
+        function loadFriendsFromLocalStorage() {
+            const savedFriends = localStorage.getItem('messagingFriends');
+            if (savedFriends) {
+                friends = JSON.parse(savedFriends);
+            }
+            updateFriendsList();
+        }
+
+        function updateUserProfile() {
+            if (currentUser) {
+                const sidebarAvatar = document.getElementById('sidebarAvatar');
+                const sidebarInitial = sidebarAvatar.querySelector('.avatar-initial');
+                
+                sidebarAvatar.style.backgroundImage = 'none';
+                if(sidebarInitial) sidebarInitial.style.display = 'flex';
+                if(sidebarInitial) sidebarInitial.textContent = currentUser.username.charAt(0).toUpperCase();
+
+                const sidebarUsername = document.getElementById('sidebarUsername');
+                const sidebarUserCode = document.getElementById('sidebarUserCode');
+                sidebarUsername.textContent = currentUser.username;
+                sidebarUserCode.textContent = `Code: ${currentUser.friendCode}`;
+            }
+        }
+
+        function showProfile() {
+            if (currentUser) {
+                const modalAvatar = document.getElementById('modalAvatar');
+                const modalInitial = modalAvatar.querySelector('.avatar-initial');
+
+                modalAvatar.style.backgroundImage = 'none';
+                if(modalInitial) modalInitial.style.display = 'flex';
+                if(modalInitial) modalInitial.textContent = currentUser.username.charAt(0).toUpperCase();
+
+                document.getElementById('profileUsername').textContent = currentUser.username;
+                document.getElementById('profileUserCode').textContent = `Code: ${currentUser.friendCode}`;
+                showModal('profileModal');
+            }
+        }
+
+        function updateServersList() {
+            const sidebar = document.querySelector('.servers-sidebar');
+            const addButton = sidebar.querySelector('.add-server');
+            
+            // Clear existing servers (except add button)
+            sidebar.querySelectorAll('.server-item-container').forEach(container => container.remove());
+
+            const renderedServerIds = new Set(); // Track rendered server IDs
+
+            // Add servers
+            servers.forEach(server => {
+                // Skip if server is invalid or already rendered
+                if (!server || !server.id || renderedServerIds.has(server.id)) {
+                    return; 
+                }
+                renderedServerIds.add(server.id); // Mark as rendered
+
+                const container = document.createElement('div');
+                container.className = 'server-item-container';
+
+                const serverIcon = document.createElement('div');
+                serverIcon.className = `server-icon ${server.id === currentServer ? 'active' : ''}`;
+                serverIcon.innerHTML = server.icon;
+                serverIcon.title = server.name;
+                serverIcon.setAttribute('data-server', server.id);
+                serverIcon.onclick = () => {
+                    switchServer(server);
+                };
+                
+                container.appendChild(serverIcon);
+
+                // Add dropdown for non-global servers
+                if (server.id !== 'global') {
+                    const dropdown = document.createElement('div');
+                    dropdown.className = 'server-actions-dropdown';
+                    dropdown.innerHTML = `<button onclick="leaveServer('${server.id}')">Leave Server</button>`;
+                    container.appendChild(dropdown);
+                }
+
+                sidebar.insertBefore(container, addButton);
+            });
+        }
+
+        function updateFriendsList() {
+            const friendsList = document.getElementById('friendsList');
+            friendsList.innerHTML = '';
+
+            friends.forEach(friend => {
+                const friendItem = document.createElement('div');
+                friendItem.className = 'friend-item';
+                friendItem.innerHTML = `
+                    <div class="friend-info">
+                        <div class="friend-name">${friend.username}</div>
+                        <div class="friend-code">Code: ${friend.friendCode}</div>
+                    </div>
+                    <div class="friend-actions">
+                        <button class="action-button" onclick="toggleFriendDropdown(this)">📞</button>
+                        <div class="action-dropdown">
+                            <button class="dropdown-button" title="Audio Call" onclick="startAudioCall('${friend.id}')">📞</button>
+                            <button class="dropdown-button" title="Video Call" onclick="startVideoCall('${friend.id}')">📹</button>
+                        </div>
+                    </div>
+                `;
+                friendsList.appendChild(friendItem);
+            });
+        }
+
+        function toggleFriendDropdown(button) {
+            // Close all other dropdowns first
+            document.querySelectorAll('.action-dropdown').forEach(dropdown => {
+                if (dropdown !== button.nextElementSibling) {
+                    dropdown.classList.remove('show');
+                }
+            });
+            
+            // Toggle the clicked dropdown
+            const dropdown = button.nextElementSibling;
+            dropdown.classList.toggle('show');
+        }
+
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.friend-actions')) {
+                document.querySelectorAll('.action-dropdown').forEach(dropdown => {
+                    dropdown.classList.remove('show');
+                });
+            }
+        });
+
+        function updateOnlineCount() {
+            const currentServerData = servers.find(s => s.id === currentServer);
+            if (currentServerData) {
+                document.getElementById('onlineCount').textContent = currentServerData.members.length;
+            }
+        }
+
+        function switchServer(serverData) {
+            if (!serverData) {
+                console.error("switchServer called with invalid server data.");
+                return;
+            }
+
+            // Stop listening to previous server
+            if (messageListener && typeof messageListener.off === 'function') {
+                messageListener.off();
+            }
+
+            currentServer = serverData.id;
+            
+            // Update active server icon
+            document.querySelectorAll('.server-icon').forEach(icon => {
+                icon.classList.remove('active');
+            });
+            document.querySelector(`[data-server="${serverData.id}"]`).classList.add('active');
+
+            // Update header
+            document.querySelector('.server-name').textContent = serverData.name;
+            updateOnlineCount();
+
+            // Load messages for this server
+            loadServerMessages(serverData.id);
+        }
+
+        function loadServerMessages(serverId) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            
+            // Listen for real-time messages
+            messageListener = realtimeDb.ref(`messages/${serverId}`).on('value', (snapshot) => {
+                const messages = [];
+                snapshot.forEach((childSnapshot) => {
+                    const message = childSnapshot.val();
+                    message.id = childSnapshot.key;
+                    messages.push(message);
+                });
+                
+                // Sort messages by timestamp
+                messages.sort((a, b) => a.timestamp - b.timestamp);
+                
+                if (messages.length === 0) {
+                    // Show welcome message for new servers
+                    if (serverId === 'global') {
+                        displayMessages([{
+                            author: 'System',
+                            content: 'Welcome to the Global Server! This is where everyone starts.',
+                            time: new Date().toLocaleTimeString()
+                        }]);
+                    } else {
+                        displayMessages([{
+                            author: 'System',
+                            content: `Welcome to ${servers.find(s => s.id === serverId).name}!`,
+                            time: new Date().toLocaleTimeString()
+                        }]);
+                    }
+                } else {
+                    displayMessages(messages);
+                }
+            });
+        }
+
+        function displayMessages(messages) {
+            const messagesContainer = document.getElementById('messagesContainer');
+            messagesContainer.innerHTML = '';
+
+            messages.forEach(message => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message';
+                
+                const authorDisplay = `<div class="message-author-avatar">${message.author.charAt(0).toUpperCase()}</div> <span class="message-author">${message.author}</span>`;
+                
+                // Sanitize text content to prevent basic HTML injection
+                const sanitizedContent = (message.content || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+                messageDiv.innerHTML = `
+                    <div class="message-header">
+                        ${authorDisplay}
+                        <span class="message-time">${message.time}</span>
+                    </div>
+                    <div class="message-content">${sanitizedContent}</div>
+                `;
+                messagesContainer.appendChild(messageDiv);
+            });
+
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const content = messageInput.value.trim();
+            
+            if (!content) return;
+
+            const message = {
+                author: currentUser.username,
+                content: content,
+                time: new Date().toLocaleTimeString(),
+                timestamp: Date.now(),
+                userId: currentUser.id
+            };
+
+            // Save message to Firebase Realtime Database
+            realtimeDb.ref(`messages/${currentServer}`).push(message).catch(error => {
+                console.error('Error sending message:', error);
+                alert('Failed to send message. Please try again.');
+            });
+
+            // Clear input
+            messageInput.value = '';
+        }
+
+        function addFriend() {
+            const friendCode = document.getElementById('friendCodeInput').value.trim();
+            if (!friendCode) {
+                alert('Please enter a friend code');
+                return;
+            }
+
+            // Search for user with this friend code in Firebase
+            db.collection('users').where('friendCode', '==', friendCode).get().then((querySnapshot) => {
+                if (!querySnapshot.empty) {
+                    const friendDoc = querySnapshot.docs[0];
+                    const friend = friendDoc.data();
+                    friend.id = friendDoc.id;
+                    
+                    // Check if already friends
+                    const alreadyFriend = friends.find(f => f.id === friend.id);
+                    if (alreadyFriend) {
+                        alert('This user is already your friend!');
+                        return;
+                    }
+
+                    friends.push(friend);
+                    updateFriendsList();
+                    document.getElementById('friendCodeInput').value = '';
+                    alert(`Successfully added ${friend.username} as a friend!`);
+                } else {
+                    alert('No user found with that friend code. Please check the code and try again.');
+                }
+            }).catch(error => {
+                console.error('Error adding friend:', error);
+                alert('Failed to add friend. Please try again.');
+            });
+        }
+
+        function showCreateServerModal() {
+            showModal('createServerModal');
+        }
+
+        function createServer() {
+            const serverName = document.getElementById('serverNameInput').value.trim();
+            if (!serverName) {
+                alert('Please enter a server name');
+                return;
+            }
+
+            const serverIcons = ['🎮', '🎵', '📚', '🎨', '🏀', '⚽', '🎪', '🌟', '🔥', '💎'];
+            const randomIcon = serverIcons[Math.floor(Math.random() * serverIcons.length)];
+
+            const newServerData = {
+                name: serverName,
+                icon: randomIcon,
+                members: [currentUser.id],
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            // Save server to Firebase
+            db.collection('servers').add(newServerData).then((docRef) => {
+                const newServer = { ...newServerData, id: docRef.id };
+                servers.push(newServer);
+                updateServersList();
+
+                document.getElementById('serverNameInput').value = '';
+                closeModal('createServerModal');
+
+                // Switch to new server
+                switchServer(newServer);
+            }).catch(error => {
+                console.error('Error creating server:', error);
+                alert('Failed to create server. Please try again.');
+            });
+        }
+
+        function showModal(modalId) {
+            document.getElementById(modalId).style.display = 'flex';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        // Auto-resize textarea
+        document.getElementById('messageInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = this.scrollHeight + 'px';
+        });
+
+        // Send message on Enter
+        document.getElementById('messageInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Check if user wants to leave global server after profile creation
+        function checkLeaveGlobal() {
+            const hasAsked = localStorage.getItem('askedLeaveGlobal');
+            if (!hasAsked && currentUser) {
+                setTimeout(() => {
+                    showModal('leaveGlobalModal');
+                    localStorage.setItem('askedLeaveGlobal', 'true');
+                }, 2000);
+            }
+        }
+
+        function leaveGlobalServer() {
+            const globalServer = servers.find(s => s.id === 'global');
+            if (globalServer) {
+                globalServer.members = globalServer.members.filter(id => id !== currentUser.id);
+                // Update in Firebase
+                db.collection('servers').doc('global').update({
+                    members: globalServer.members
+                }).then(() => {
+                    updateOnlineCount();
+                }).catch(error => {
+                    console.error('Error leaving global server:', error);
+                });
+            }
+            closeModal('leaveGlobalModal');
+        }
+
+        // Initialize after profile creation
+        if (currentUser) {
+            checkLeaveGlobal();
+            listenForIncomingCalls();
+            
+            // Add test button for debugging
+            setTimeout(() => {
+                addDebugButton();
+            }, 2000);
+        }
+
+        function addDebugButton() {
+            const debugButton = document.createElement('button');
+            debugButton.textContent = '🔧 Debug Calls';
+            debugButton.style.cssText = `
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                z-index: 9999;
+                padding: 10px;
+                background: #ff6b6b;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+            `;
+            debugButton.onclick = testCallListener;
+            document.body.appendChild(debugButton);
+        }
+
+        function testCallListener() {
+            console.log("🔧 === CALL LISTENER DEBUG ===");
+            console.log("Current user:", currentUser);
+            console.log("Friends:", friends);
+            console.log("Peer connection exists:", !!peerConnection);
+            
+            // Test if we can access Firebase
+            db.collection('calls').limit(1).get().then(snapshot => {
+                console.log("✅ Firebase access working, found", snapshot.size, "call documents");
+            }).catch(error => {
+                console.error("❌ Firebase access failed:", error);
+            });
+        }
+
+        // =============================================
+        // ========== WebRTC Call Functions ============
+        // =============================================
+
+        function listenForIncomingCalls() {
+            if (!currentUser) {
+                console.log("Cannot listen for calls - no current user");
+                return;
+            }
+            
+            console.log("Setting up incoming call listener for user:", currentUser.id);
+            
+            // Listen for documents where this user is a participant
+            db.collection('calls').where('participants', 'array-contains', currentUser.id)
+              .onSnapshot(snapshot => {
+                console.log("Call listener triggered, changes:", snapshot.docChanges().length);
+                
+                snapshot.docChanges().forEach(async (change) => {
+                    const callData = change.doc.data();
+                    console.log("Call change detected:", change.type, "Call data:", callData);
+                    
+                    // Make sure it's an offer for us, not from us
+                    if (change.type === 'added' && callData.offer && callData.offer.sdp && callData.callerId !== currentUser.id) {
+                        console.log("✅ Incoming call detected from:", callData.callerId);
+                        console.log("Current user ID:", currentUser.id);
+                        console.log("Caller ID:", callData.callerId);
+                        
+                        // Prevent answering a call that's already in progress or answered
+                        if (peerConnection) {
+                            console.log("Already in a call, ignoring new offer.");
+                            return;
+                        }
+
+                        currentFriendId = callData.callerId;
+                        sessionStorage.setItem('webrtcOffer', JSON.stringify(callData.offer));
+                        sessionStorage.setItem('callDocId', change.doc.id);
+                        
+                        const friend = friends.find(f => f.id === currentFriendId) || { username: 'A friend' };
+                        console.log("Friend found:", friend);
+                        
+                        document.getElementById('incomingCallText').textContent = `Incoming call from ${friend.username}...`;
+                        
+                        // Show the modal with animation
+                        const modal = document.getElementById('incomingCallModal');
+                        modal.style.display = 'block';
+                        
+                        // Play notification sound
+                        playIncomingCallSound();
+                        
+                        // Focus the modal to ensure it's visible
+                        modal.focus();
+                        
+                        console.log("✅ Incoming call modal displayed");
+                    } else if (change.type === 'removed') {
+                        // If the call document is deleted (e.g., caller hangs up before we answer), close the modal.
+                        const deletedDocId = sessionStorage.getItem('callDocId');
+                        if (change.doc.id === deletedDocId) {
+                            console.log("Call was cancelled by caller.");
+                            rejectCall();
+                        }
+                    }
+                });
+            }, error => {
+                console.error("Error in call listener:", error);
+            });
+        }
+
+        function playIncomingCallSound() {
+            try {
+                // Create a simple notification sound using Web Audio API
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+                oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+                
+                gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (error) {
+                console.log("Could not play notification sound:", error);
+            }
+        }
+
+        async function startCall(friendId, isVideo = true) {
+            console.log(`🚀 Starting ${isVideo ? 'video' : 'audio'} call with ${friendId}`);
+            console.log("Current user ID:", currentUser.id);
+            console.log("Friend ID:", friendId);
+            
+            if (peerConnection) {
+                alert("You are already in a call.");
+                return;
+            }
+            currentFriendId = friendId;
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: isVideo, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                console.log("✅ Media stream obtained");
+            } catch (error) {
+                console.error("❌ Error accessing media devices.", error);
+                alert("Could not access your camera or microphone. Please check permissions.");
+                return;
+            }
+            
+            document.getElementById('callContainer').style.display = 'flex';
+            createPeerConnection();
+
+            const channelId = [currentUser.id, friendId].sort().join('-');
+            console.log("📞 Call channel ID:", channelId);
+            signalingChannel = db.collection('calls').doc(channelId);
+
+            // Create offer and set it on the document
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+            console.log("✅ Offer created and set as local description");
+
+            const callDoc = {
+                callerId: currentUser.id,
+                participants: [currentUser.id, friendId],
+                offer: {
+                    type: offer.type,
+                    sdp: offer.sdp,
+                },
+            };
+            
+            console.log("📝 Saving call document:", callDoc);
+            await signalingChannel.set(callDoc);
+            console.log("✅ Call document saved to Firebase");
+
+            // Listen for an answer
+            signalingChannel.onSnapshot(async (snapshot) => {
+                const data = snapshot.data();
+                console.log("📡 Signaling update received:", data);
+                if (data && data.answer && peerConnection.signalingState !== 'stable') {
+                    console.log("✅ Received answer");
+                    const answer = new RTCSessionDescription(data.answer);
+                    await peerConnection.setRemoteDescription(answer);
+                }
+            });
+
+            listenForIceCandidates();
+        }
+
+        function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+            
+            peerConnection.ontrack = event => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            peerConnection.onicecandidate = event => {
+                if (event.candidate) {
+                    signalingChannel.collection('calleeCandidates').add(event.candidate.toJSON());
+                }
+            };
+        }
+
+        function listenForIceCandidates() {
+             // Listen for ICE candidates from the other peer
+            const iceCandidateCollection = signalingChannel.collection(peerConnection.localDescription.type === 'offer' ? 'calleeCandidates' : 'callerCandidates');
+            iceCandidateCollection.onSnapshot(snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+                    }
+                });
+            });
+        }
+        
+        function startAudioCall(friendId) {
+            startCall(friendId, false);
+        }
+
+        function startVideoCall(friendId) {
+            startCall(friendId, true);
+        }
+
+        function toggleMute() {
+            if (!localStream) return;
+            localStream.getAudioTracks().forEach(track => {
+                track.enabled = !track.enabled;
+            });
+            const isMuted = !localStream.getAudioTracks()[0]?.enabled;
+            document.getElementById('mute-button').classList.toggle('muted', isMuted);
+            document.getElementById('mute-button').innerHTML = isMuted ? '🔇' : '🎤';
+        }
+
+        function toggleVideo() {
+            if (!localStream) return;
+            localStream.getVideoTracks().forEach(track => {
+                track.enabled = !track.enabled;
+            });
+            const isOff = !localStream.getVideoTracks()[0]?.enabled;
+            document.getElementById('video-button').classList.toggle('off', isOff);
+            document.getElementById('video-button').innerHTML = isOff ? '📸' : '📹';
+        }
+
+        function toggleDeviceMenu(type) {
+            const menu = document.getElementById(`${type}-device-menu`);
+            if (menu.style.display === 'block') {
+                menu.style.display = 'none';
+            } else {
+                populateDeviceMenu(type);
+                menu.style.display = 'block';
+            }
+        }
+
+        async function populateDeviceMenu(type) {
+            const menu = document.getElementById(`${type}-device-menu`);
+            menu.innerHTML = ''; // Clear old list
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const kind = `${type}input`; // 'audioinput' or 'videoinput'
+
+            devices.forEach(device => {
+                if (device.kind === kind) {
+                    const button = document.createElement('button');
+                    button.textContent = device.label || `${type} device ${menu.children.length + 1}`;
+                    button.onclick = () => switchDevice(type, device.deviceId);
+                    menu.appendChild(button);
+                }
+            });
+        }
+
+        async function switchDevice(type, deviceId) {
+            console.log(`Switching ${type} device to ${deviceId}`);
+            // Stop current stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+
+            // Get new stream with the specific device
+            const constraints = {
+                audio: type === 'audio' ? { deviceId: { exact: deviceId } } : true,
+                video: type === 'video' ? { deviceId: { exact: deviceId } } : true,
+            };
+            
+            // Keep current audio/video state if not switching that type
+            if(type === 'video') {
+                constraints.audio = { deviceId: { exact: localStream.getAudioTracks()[0].getSettings().deviceId }};
+            } else {
+                 constraints.video = { deviceId: { exact: localStream.getVideoTracks()[0].getSettings().deviceId }};
+            }
+
+
+            localStream = await navigator.mediaDevices.getUserMedia(constraints);
+            document.getElementById('localVideo').srcObject = localStream;
+
+            // Replace the track in the peer connection
+            if (peerConnection) {
+                const newTrack = localStream.getTracks().find(track => track.kind === type);
+                const sender = peerConnection.getSenders().find(s => s.track && s.track.kind === type);
+                if (sender) {
+                    sender.replaceTrack(newTrack);
+                }
+            }
+             // Close the menu
+            document.getElementById(`${type}-device-menu`).style.display = 'none';
+        }
+
+        async function hangUp() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            if (peerConnection) {
+                peerConnection.close();
+            }
+             if (signalingChannel) {
+                // Delete ICE candidates before deleting the call doc
+                const callerCandidates = await signalingChannel.collection('callerCandidates').get();
+                callerCandidates.forEach(async candidate => await candidate.ref.delete());
+                const calleeCandidates = await signalingChannel.collection('calleeCandidates').get();
+                calleeCandidates.forEach(async candidate => await candidate.ref.delete());
+
+                signalingChannel.delete();
+            }
+
+            document.getElementById('callContainer').style.display = 'none';
+            document.getElementById('localVideo').srcObject = null;
+            document.getElementById('remoteVideo').srcObject = null;
+            
+            peerConnection = null;
+            localStream = null;
+            signalingChannel = null;
+            
+            console.log("Call hung up and cleaned up.");
+        }
+
+        function rejectCall() {
+            const callDocId = sessionStorage.getItem('callDocId');
+            if (callDocId) {
+                db.collection('calls').doc(callDocId).delete();
+            }
+            document.getElementById('incomingCallModal').style.display = 'none';
+            sessionStorage.removeItem('webrtcOffer');
+            sessionStorage.removeItem('callDocId');
+            console.log("Call rejected.");
+        }
+
+        function leaveServer(serverId) {
+            if (!confirm("Are you sure you want to leave this server?")) {
+                return;
+            }
+
+            const serverRef = db.collection('servers').doc(serverId);
+            
+            db.runTransaction(transaction => {
+                return transaction.get(serverRef).then(serverDoc => {
+                    if (!serverDoc.exists) {
+                        throw "Server not found!";
+                    }
+
+                    const serverData = serverDoc.data();
+                    const newMembers = serverData.members.filter(memberId => memberId !== currentUser.id);
+
+                    if (newMembers.length === 0) {
+                        // If last member is leaving, delete the server
+                        transaction.delete(serverRef);
+                    } else {
+                        // Otherwise, just update the members list
+                        transaction.update(serverRef, { members: newMembers });
+                    }
+                });
+            }).then(() => {
+                // Update local state
+                servers = servers.filter(s => s.id !== serverId);
+                if (currentServer === serverId) {
+                    const globalServer = servers.find(s => s.id === 'global');
+                    switchServer(globalServer);
+                }
+                updateServersList();
+
+            }).catch(error => {
+                console.error("Error leaving server:", error);
+                alert("Failed to leave the server. Please try again.");
+            });
+        }
+
+        async function answerCall() {
+            console.log("📞 Answering call");
+            const offerString = sessionStorage.getItem('webrtcOffer');
+            const callDocId = sessionStorage.getItem('callDocId');
+            if (!offerString || !callDocId) {
+                console.error("❌ No offer found to answer");
+                return;
+            }
+            
+            document.getElementById('incomingCallModal').style.display = 'none';
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                document.getElementById('localVideo').srcObject = localStream;
+                console.log("✅ Media stream obtained for answer");
+            } catch (error) {
+                console.error("❌ Could not access media devices.", error);
+                return;
+            }
+            
+            document.getElementById('callContainer').style.display = 'flex';
+            createPeerConnection();
+
+            signalingChannel = db.collection('calls').doc(callDocId);
+            listenForIceCandidates();
+            
+            const offer = new RTCSessionDescription(JSON.parse(offerString));
+            await peerConnection.setRemoteDescription(offer);
+            
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            await signalingChannel.update({ answer: { type: answer.type, sdp: answer.sdp } });
+            console.log("✅ Answer sent to caller");
+            
+            sessionStorage.removeItem('webrtcOffer');
+            sessionStorage.removeItem('callDocId');
+        }
+    </script>
+</body>
+
