@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Testing</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-section {
+            background: #333;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        button {
+            background: #00ff88;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #00cc6a;
+        }
+        .log {
+            background: #000;
+            color: #00ff88;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        input {
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            padding: 8px;
+            border-radius: 5px;
+            margin: 5px;
+        }
+    </style>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="firebase-config.js"></script>
+</head>
+<body>
+    <h1>Call Feature Testing</h1>
+    
+    <div class="test-section">
+        <h2>Firebase Connection Test</h2>
+        <button onclick="testFirebaseConnection()">Test Firebase Connection</button>
+        <div id="firebaseLog" class="log"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>User Management Test</h2>
+        <input type="text" id="testUsername" placeholder="Enter username">
+        <button onclick="createTestUser()">Create Test User</button>
+        <button onclick="loadTestUsers()">Load All Users</button>
+        <div id="userLog" class="log"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Friendship Test</h2>
+        <input type="text" id="friendCode1" placeholder="Friend Code 1">
+        <input type="text" id="friendCode2" placeholder="Friend Code 2">
+        <button onclick="createTestFriendship()">Create Test Friendship</button>
+        <button onclick="loadFriendships()">Load All Friendships</button>
+        <div id="friendshipLog" class="log"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Call Test</h2>
+        <input type="text" id="callerId" placeholder="Caller ID">
+        <input type="text" id="calleeId" placeholder="Callee ID">
+        <button onclick="createTestCall()">Create Test Call</button>
+        <button onclick="listenForTestCalls()">Listen for Calls</button>
+        <button onclick="clearTestCalls()">Clear All Calls</button>
+        <div id="callLog" class="log"></div>
+    </div>
+
+    <script>
+        function log(elementId, message) {
+            const logElement = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function testFirebaseConnection() {
+            log('firebaseLog', 'Testing Firebase connection...');
+            
+            // Test Firestore
+            db.collection('test').doc('connection').set({
+                timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                message: 'Connection test successful'
+            }).then(() => {
+                log('firebaseLog', '✅ Firestore write successful');
+                return db.collection('test').doc('connection').get();
+            }).then((doc) => {
+                if (doc.exists) {
+                    log('firebaseLog', '✅ Firestore read successful');
+                    log('firebaseLog', `Data: ${JSON.stringify(doc.data())}`);
+                } else {
+                    log('firebaseLog', '❌ Firestore read failed - document not found');
+                }
+            }).catch(error => {
+                log('firebaseLog', `❌ Firebase error: ${error.message}`);
+            });
+        }
+
+        function createTestUser() {
+            const username = document.getElementById('testUsername').value;
+            if (!username) {
+                log('userLog', '❌ Please enter a username');
+                return;
+            }
+
+            const userData = {
+                username: username,
+                friendCode: Math.floor(100000 + Math.random() * 900000).toString(),
+                id: Date.now().toString(),
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            log('userLog', `Creating user: ${JSON.stringify(userData)}`);
+
+            db.collection('users').doc(userData.id).set(userData)
+                .then(() => {
+                    log('userLog', `✅ User created successfully with ID: ${userData.id}`);
+                    log('userLog', `Friend code: ${userData.friendCode}`);
+                })
+                .catch(error => {
+                    log('userLog', `❌ Error creating user: ${error.message}`);
+                });
+        }
+
+        function loadTestUsers() {
+            log('userLog', 'Loading all users...');
+            
+            db.collection('users').get()
+                .then((querySnapshot) => {
+                    log('userLog', `Found ${querySnapshot.size} users:`);
+                    querySnapshot.forEach((doc) => {
+                        const user = doc.data();
+                        log('userLog', `- ${user.username} (ID: ${doc.id}, Code: ${user.friendCode})`);
+                    });
+                })
+                .catch(error => {
+                    log('userLog', `❌ Error loading users: ${error.message}`);
+                });
+        }
+
+        function createTestFriendship() {
+            const code1 = document.getElementById('friendCode1').value;
+            const code2 = document.getElementById('friendCode2').value;
+            
+            if (!code1 || !code2) {
+                log('friendshipLog', '❌ Please enter both friend codes');
+                return;
+            }
+
+            // Find users by friend codes
+            Promise.all([
+                db.collection('users').where('friendCode', '==', code1).get(),
+                db.collection('users').where('friendCode', '==', code2).get()
+            ]).then(([snapshot1, snapshot2]) => {
+                if (snapshot1.empty || snapshot2.empty) {
+                    log('friendshipLog', '❌ One or both users not found');
+                    return;
+                }
+
+                const user1 = snapshot1.docs[0];
+                const user2 = snapshot2.docs[0];
+
+                const friendshipData = {
+                    participants: [user1.id, user2.id].sort(),
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+
+                log('friendshipLog', `Creating friendship between ${user1.data().username} and ${user2.data().username}`);
+
+                db.collection('friendships').add(friendshipData)
+                    .then((docRef) => {
+                        log('friendshipLog', `✅ Friendship created with ID: ${docRef.id}`);
+                    })
+                    .catch(error => {
+                        log('friendshipLog', `❌ Error creating friendship: ${error.message}`);
+                    });
+            }).catch(error => {
+                log('friendshipLog', `❌ Error finding users: ${error.message}`);
+            });
+        }
+
+        function loadFriendships() {
+            log('friendshipLog', 'Loading all friendships...');
+            
+            db.collection('friendships').get()
+                .then((querySnapshot) => {
+                    log('friendshipLog', `Found ${querySnapshot.size} friendships:`);
+                    querySnapshot.forEach((doc) => {
+                        const friendship = doc.data();
+                        log('friendshipLog', `- Friendship ID: ${doc.id}, Participants: ${friendship.participants.join(', ')}`);
+                    });
+                })
+                .catch(error => {
+                    log('friendshipLog', `❌ Error loading friendships: ${error.message}`);
+                });
+        }
+
+        function createTestCall() {
+            const callerId = document.getElementById('callerId').value;
+            const calleeId = document.getElementById('calleeId').value;
+            
+            if (!callerId || !calleeId) {
+                log('callLog', '❌ Please enter both caller and callee IDs');
+                return;
+            }
+
+            const callDocId = `test_call_${Date.now()}`;
+            const callData = {
+                callerId: callerId,
+                participants: [callerId, calleeId],
+                offer: {
+                    type: 'offer',
+                    sdp: 'test-sdp-data'
+                },
+                status: 'ringing',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            log('callLog', `Creating test call: ${callDocId}`);
+
+            db.collection('calls').doc(callDocId).set(callData)
+                .then(() => {
+                    log('callLog', `✅ Test call created: ${callDocId}`);
+                })
+                .catch(error => {
+                    log('callLog', `❌ Error creating test call: ${error.message}`);
+                });
+        }
+
+        function listenForTestCalls() {
+            log('callLog', 'Setting up call listener...');
+            
+            db.collection('calls').onSnapshot(snapshot => {
+                log('callLog', `Call listener triggered: ${snapshot.docChanges().length} changes`);
+                snapshot.docChanges().forEach(change => {
+                    const callData = change.doc.data();
+                    log('callLog', `${change.type}: Call ID ${change.doc.id} - Status: ${callData.status}, Caller: ${callData.callerId}`);
+                });
+            }, error => {
+                log('callLog', `❌ Call listener error: ${error.message}`);
+            });
+        }
+
+        function clearTestCalls() {
+            log('callLog', 'Clearing all test calls...');
+            
+            db.collection('calls').get()
+                .then((querySnapshot) => {
+                    const deletePromises = querySnapshot.docs.map(doc => doc.ref.delete());
+                    return Promise.all(deletePromises);
+                })
+                .then(() => {
+                    log('callLog', '✅ All test calls cleared');
+                })
+                .catch(error => {
+                    log('callLog', `❌ Error clearing calls: ${error.message}`);
+                });
+        }
+    </script>
+</body>
+</html> 
