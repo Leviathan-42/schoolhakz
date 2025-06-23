@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .debug-section {
+            background: #333;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+        button {
+            background: #00ff88;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #00cc6a;
+        }
+        .log {
+            background: #000;
+            color: #00ff88;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        video {
+            width: 300px;
+            height: 225px;
+            background: #000;
+            border: 2px solid #00ff88;
+            border-radius: 5px;
+            margin: 10px;
+        }
+        .video-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.connected {
+            background: #00ff88;
+            color: #1a1a1a;
+        }
+        .status.disconnected {
+            background: #ff4444;
+            color: white;
+        }
+        .status.connecting {
+            background: #ffaa00;
+            color: #1a1a1a;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebRTC Connection Debug</h1>
+    
+    <div class="debug-section">
+        <h2>Media Devices Test</h2>
+        <button onclick="testMediaDevices()">Test Camera/Microphone</button>
+        <button onclick="listDevices()">List All Devices</button>
+        <div id="mediaLog" class="log"></div>
+        <div class="video-container">
+            <video id="localVideo" autoplay playsinline muted></video>
+        </div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>WebRTC Connection Test</h2>
+        <button onclick="createPeerConnection()">Create Peer Connection</button>
+        <button onclick="testIceServers()">Test ICE Servers</button>
+        <button onclick="generateOffer()">Generate Offer</button>
+        <button onclick="closeConnection()">Close Connection</button>
+        <div id="connectionStatus" class="status disconnected">Disconnected</div>
+        <div id="rtcLog" class="log"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h2>Network Information</h2>
+        <button onclick="getNetworkInfo()">Get Network Info</button>
+        <div id="networkLog" class="log"></div>
+    </div>
+
+    <script>
+        let peerConnection = null;
+        let localStream = null;
+
+        function log(elementId, message) {
+            const logElement = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        async function testMediaDevices() {
+            log('mediaLog', 'Testing media devices...');
+            
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                
+                localStream = stream;
+                document.getElementById('localVideo').srcObject = stream;
+                
+                log('mediaLog', `✅ Media access successful`);
+                log('mediaLog', `Tracks: ${stream.getTracks().map(t => t.kind).join(', ')}`);
+                
+                stream.getTracks().forEach(track => {
+                    log('mediaLog', `${track.kind} track settings:`, track.getSettings());
+                });
+                
+            } catch (error) {
+                log('mediaLog', `❌ Media access failed: ${error.message}`);
+            }
+        }
+
+        async function listDevices() {
+            log('mediaLog', 'Listing all media devices...');
+            
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                
+                const audioInputs = devices.filter(d => d.kind === 'audioinput');
+                const videoInputs = devices.filter(d => d.kind === 'videoinput');
+                const audioOutputs = devices.filter(d => d.kind === 'audiooutput');
+                
+                log('mediaLog', `Audio inputs: ${audioInputs.length}`);
+                audioInputs.forEach(device => {
+                    log('mediaLog', `  - ${device.label || 'Unknown'} (${device.deviceId})`);
+                });
+                
+                log('mediaLog', `Video inputs: ${videoInputs.length}`);
+                videoInputs.forEach(device => {
+                    log('mediaLog', `  - ${device.label || 'Unknown'} (${device.deviceId})`);
+                });
+                
+                log('mediaLog', `Audio outputs: ${audioOutputs.length}`);
+                audioOutputs.forEach(device => {
+                    log('mediaLog', `  - ${device.label || 'Unknown'} (${device.deviceId})`);
+                });
+                
+            } catch (error) {
+                log('mediaLog', `❌ Error listing devices: ${error.message}`);
+            }
+        }
+
+        function createPeerConnection() {
+            if (peerConnection) {
+                log('rtcLog', 'Closing existing connection...');
+                peerConnection.close();
+            }
+            
+            const config = {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' }
+                ],
+                iceCandidatePoolSize: 10
+            };
+            
+            peerConnection = new RTCPeerConnection(config);
+            
+            // Add event listeners
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    log('rtcLog', `ICE candidate: ${event.candidate.candidate}`);
+                } else {
+                    log('rtcLog', 'ICE candidate gathering complete');
+                }
+            };
+            
+            peerConnection.oniceconnectionstatechange = () => {
+                const status = document.getElementById('connectionStatus');
+                status.textContent = `ICE: ${peerConnection.iceConnectionState}`;
+                
+                if (peerConnection.iceConnectionState === 'connected') {
+                    status.className = 'status connected';
+                } else if (peerConnection.iceConnectionState === 'failed') {
+                    status.className = 'status disconnected';
+                } else {
+                    status.className = 'status connecting';
+                }
+                
+                log('rtcLog', `ICE connection state: ${peerConnection.iceConnectionState}`);
+            };
+            
+            peerConnection.onconnectionstatechange = () => {
+                log('rtcLog', `Connection state: ${peerConnection.connectionState}`);
+            };
+            
+            peerConnection.onsignalingstatechange = () => {
+                log('rtcLog', `Signaling state: ${peerConnection.signalingState}`);
+            };
+            
+            // Add local stream if available
+            if (localStream) {
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                    log('rtcLog', `Added ${track.kind} track to peer connection`);
+                });
+            }
+            
+            log('rtcLog', '✅ Peer connection created');
+        }
+
+        async function testIceServers() {
+            if (!peerConnection) {
+                log('rtcLog', '❌ Create peer connection first');
+                return;
+            }
+            
+            log('rtcLog', 'Testing ICE servers...');
+            
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                log('rtcLog', '✅ Offer created and set');
+                log('rtcLog', `SDP: ${offer.sdp.substring(0, 200)}...`);
+            } catch (error) {
+                log('rtcLog', `❌ Error creating offer: ${error.message}`);
+            }
+        }
+
+        async function generateOffer() {
+            if (!peerConnection) {
+                log('rtcLog', '❌ Create peer connection first');
+                return;
+            }
+            
+            if (!localStream) {
+                log('rtcLog', '❌ Get media stream first');
+                return;
+            }
+            
+            log('rtcLog', 'Generating offer...');
+            
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                log('rtcLog', '✅ Offer generated successfully');
+                log('rtcLog', `Offer SDP length: ${offer.sdp.length} characters`);
+                
+                // Show first part of SDP for debugging
+                const sdpLines = offer.sdp.split('\n');
+                log('rtcLog', 'SDP preview:');
+                sdpLines.slice(0, 10).forEach(line => {
+                    log('rtcLog', `  ${line}`);
+                });
+                
+            } catch (error) {
+                log('rtcLog', `❌ Error generating offer: ${error.message}`);
+            }
+        }
+
+        function closeConnection() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+                log('rtcLog', '✅ Connection closed');
+                
+                const status = document.getElementById('connectionStatus');
+                status.textContent = 'Disconnected';
+                status.className = 'status disconnected';
+            }
+        }
+
+        async function getNetworkInfo() {
+            log('networkLog', 'Getting network information...');
+            
+            // Basic browser info
+            log('networkLog', `User Agent: ${navigator.userAgent.substring(0, 100)}...`);
+            log('networkLog', `Online status: ${navigator.onLine ? 'Online' : 'Offline'}`);
+            
+            if ('connection' in navigator) {
+                const connection = navigator.connection;
+                log('networkLog', `Connection type: ${connection.effectiveType || 'unknown'}`);
+                log('networkLog', `Downlink: ${connection.downlink || 'unknown'} Mbps`);
+                log('networkLog', `RTT: ${connection.rtt || 'unknown'} ms`);
+                log('networkLog', `Save data: ${connection.saveData || 'unknown'}`);
+            } else {
+                log('networkLog', 'Network Information API not available');
+            }
+            
+            // Test if we're running locally or on a server
+            const isLocalhost = window.location.hostname === 'localhost' || 
+                               window.location.hostname === '127.0.0.1' ||
+                               window.location.hostname === '';
+            log('networkLog', `Running on: ${isLocalhost ? 'localhost' : 'remote server'}`);
+            log('networkLog', `Protocol: ${window.location.protocol}`);
+            log('networkLog', `Host: ${window.location.host}`);
+            
+            // Test multiple endpoints with different approaches
+            const testUrls = [
+                { url: 'https://www.google.com/favicon.ico', name: 'Google' },
+                { url: 'https://firebase.google.com/favicon.ico', name: 'Firebase' },
+                { url: 'https://httpbin.org/get', name: 'HTTPBin' }
+            ];
+            
+            log('networkLog', 'Testing connectivity to external endpoints...');
+            
+            for (const test of testUrls) {
+                try {
+                    const startTime = Date.now();
+                    const response = await fetch(test.url, { 
+                        method: 'GET',
+                        mode: 'cors',
+                        cache: 'no-cache',
+                        timeout: 5000
+                    });
+                    const endTime = Date.now();
+                    const responseTime = endTime - startTime;
+                    
+                    log('networkLog', `✅ ${test.name}: ${response.status} (${responseTime}ms)`);
+                } catch (error) {
+                    log('networkLog', `❌ ${test.name}: ${error.message}`);
+                    
+                    // Try a different approach for this endpoint
+                    try {
+                        const img = new Image();
+                        img.onload = () => log('networkLog', `✅ ${test.name}: Image loaded successfully`);
+                        img.onerror = () => log('networkLog', `❌ ${test.name}: Image failed to load`);
+                        img.src = test.url;
+                    } catch (imgError) {
+                        log('networkLog', `❌ ${test.name}: Image test also failed`);
+                    }
+                }
+            }
+            
+            // Test WebRTC specific connectivity
+            log('networkLog', 'Testing WebRTC connectivity...');
+            try {
+                const pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                });
+                
+                let iceCandidatesFound = 0;
+                
+                pc.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        iceCandidatesFound++;
+                        log('networkLog', `✅ ICE candidate ${iceCandidatesFound}: ${event.candidate.candidate.substring(0, 50)}...`);
+                    } else {
+                        log('networkLog', `✅ ICE candidate gathering complete (${iceCandidatesFound} candidates found)`);
+                    }
+                };
+                
+                pc.oniceconnectionstatechange = () => {
+                    log('networkLog', `ICE connection state: ${pc.iceConnectionState}`);
+                };
+                
+                pc.onicegatheringstatechange = () => {
+                    log('networkLog', `ICE gathering state: ${pc.iceGatheringState}`);
+                };
+                
+                // Create a dummy offer to trigger ICE gathering
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                
+                // Clean up after 10 seconds
+                setTimeout(() => {
+                    pc.close();
+                    log('networkLog', 'WebRTC test completed');
+                }, 10000);
+                
+            } catch (error) {
+                log('networkLog', `❌ WebRTC test failed: ${error.message}`);
+            }
+        }
+
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            log('mediaLog', 'Page loaded, ready for testing');
+            getNetworkInfo();
+        });
+    </script>
+</body>
+</html> 

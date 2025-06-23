@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Call Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        .test-container {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .browser-window {
+            flex: 1;
+            background: #333;
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #00ff88;
+        }
+        .browser-window h3 {
+            color: #00ff88;
+            margin-top: 0;
+        }
+        button {
+            background: #00ff88;
+            color: #1a1a1a;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #00cc6a;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #000;
+            color: #00ff88;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+            margin: 10px 0;
+            font-size: 12px;
+        }
+        video {
+            width: 100%;
+            max-width: 300px;
+            height: 225px;
+            background: #000;
+            border: 2px solid #00ff88;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #00ff88;
+            color: #1a1a1a;
+        }
+        .status.disconnected {
+            background: #ff4444;
+            color: white;
+        }
+        .status.connecting {
+            background: #ffaa00;
+            color: #1a1a1a;
+        }
+    </style>
+</head>
+<body>
+    <h1>Local Call Test</h1>
+    <p>This page tests WebRTC calls between two browser windows on the same machine.</p>
+    
+    <div class="test-container">
+        <div class="browser-window">
+            <h3>Browser Window 1 (Caller)</h3>
+            <button onclick="initCaller()">Initialize Caller</button>
+            <button onclick="startLocalCall()" id="startCallBtn" disabled>Start Call</button>
+            <button onclick="hangupCaller()" id="hangupCallerBtn" disabled>Hang Up</button>
+            <div id="callerStatus" class="status disconnected">Not initialized</div>
+            <video id="callerLocalVideo" autoplay playsinline muted></video>
+            <video id="callerRemoteVideo" autoplay playsinline></video>
+            <div id="callerLog" class="log"></div>
+        </div>
+        
+        <div class="browser-window">
+            <h3>Browser Window 2 (Callee)</h3>
+            <button onclick="initCallee()">Initialize Callee</button>
+            <button onclick="answerLocalCall()" id="answerCallBtn" disabled>Answer Call</button>
+            <button onclick="hangupCallee()" id="hangupCalleeBtn" disabled>Hang Up</button>
+            <div id="calleeStatus" class="status disconnected">Not initialized</div>
+            <video id="calleeLocalVideo" autoplay playsinline muted></video>
+            <video id="calleeRemoteVideo" autoplay playsinline></video>
+            <div id="calleeLog" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        let callerPC = null;
+        let calleePC = null;
+        let callerStream = null;
+        let calleeStream = null;
+        let offer = null;
+
+        function log(elementId, message) {
+            const logElement = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(elementId, status, className) {
+            const statusElement = document.getElementById(elementId);
+            statusElement.textContent = status;
+            statusElement.className = `status ${className}`;
+        }
+
+        async function initCaller() {
+            try {
+                log('callerLog', 'Initializing caller...');
+                
+                // Get media stream
+                callerStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+                document.getElementById('callerLocalVideo').srcObject = callerStream;
+                
+                // Create peer connection
+                callerPC = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                
+                // Add local stream
+                callerStream.getTracks().forEach(track => {
+                    callerPC.addTrack(track, callerStream);
+                });
+                
+                // Handle remote stream
+                callerPC.ontrack = (event) => {
+                    document.getElementById('callerRemoteVideo').srcObject = event.streams[0];
+                    log('callerLog', 'Received remote stream');
+                };
+                
+                // Monitor connection state
+                callerPC.onconnectionstatechange = () => {
+                    log('callerLog', `Connection state: ${callerPC.connectionState}`);
+                    if (callerPC.connectionState === 'connected') {
+                        updateStatus('callerStatus', 'Connected', 'connected');
+                    } else if (callerPC.connectionState === 'failed') {
+                        updateStatus('callerStatus', 'Failed', 'disconnected');
+                    }
+                };
+                
+                // Handle ICE candidates
+                callerPC.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        log('callerLog', `ICE candidate: ${event.candidate.candidate.substring(0, 50)}...`);
+                        // Store candidate for callee
+                        if (!window.callerCandidates) window.callerCandidates = [];
+                        window.callerCandidates.push(event.candidate);
+                    }
+                };
+                
+                updateStatus('callerStatus', 'Ready', 'connecting');
+                document.getElementById('startCallBtn').disabled = false;
+                log('callerLog', '✅ Caller initialized successfully');
+                
+            } catch (error) {
+                log('callerLog', `❌ Error initializing caller: ${error.message}`);
+            }
+        }
+
+        async function initCallee() {
+            try {
+                log('calleeLog', 'Initializing callee...');
+                
+                // Get media stream
+                calleeStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+                document.getElementById('calleeLocalVideo').srcObject = calleeStream;
+                
+                // Create peer connection
+                calleePC = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+                
+                // Add local stream
+                calleeStream.getTracks().forEach(track => {
+                    calleePC.addTrack(track, calleeStream);
+                });
+                
+                // Handle remote stream
+                calleePC.ontrack = (event) => {
+                    document.getElementById('calleeRemoteVideo').srcObject = event.streams[0];
+                    log('calleeLog', 'Received remote stream');
+                };
+                
+                // Monitor connection state
+                calleePC.onconnectionstatechange = () => {
+                    log('calleeLog', `Connection state: ${calleePC.connectionState}`);
+                    if (calleePC.connectionState === 'connected') {
+                        updateStatus('calleeStatus', 'Connected', 'connected');
+                    } else if (calleePC.connectionState === 'failed') {
+                        updateStatus('calleeStatus', 'Failed', 'disconnected');
+                    }
+                };
+                
+                // Handle ICE candidates
+                calleePC.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        log('calleeLog', `ICE candidate: ${event.candidate.candidate.substring(0, 50)}...`);
+                        // Store candidate for caller
+                        if (!window.calleeCandidates) window.calleeCandidates = [];
+                        window.calleeCandidates.push(event.candidate);
+                    }
+                };
+                
+                updateStatus('calleeStatus', 'Ready', 'connecting');
+                log('calleeLog', '✅ Callee initialized successfully');
+                
+            } catch (error) {
+                log('calleeLog', `❌ Error initializing callee: ${error.message}`);
+            }
+        }
+
+        async function startLocalCall() {
+            if (!callerPC) {
+                log('callerLog', '❌ Caller not initialized');
+                return;
+            }
+            
+            try {
+                log('callerLog', 'Creating offer...');
+                offer = await callerPC.createOffer();
+                await callerPC.setLocalDescription(offer);
+                log('callerLog', 'Offer created and set');
+                
+                updateStatus('callerStatus', 'Calling...', 'connecting');
+                document.getElementById('answerCallBtn').disabled = false;
+                
+            } catch (error) {
+                log('callerLog', `❌ Error creating offer: ${error.message}`);
+            }
+        }
+
+        async function answerLocalCall() {
+            if (!calleePC || !offer) {
+                log('calleeLog', '❌ Callee not initialized or no offer');
+                return;
+            }
+            
+            try {
+                log('calleeLog', 'Setting remote description...');
+                await calleePC.setRemoteDescription(offer);
+                
+                log('calleeLog', 'Creating answer...');
+                const answer = await calleePC.createAnswer();
+                await calleePC.setLocalDescription(answer);
+                log('calleeLog', 'Answer created and set');
+                
+                // Exchange ICE candidates
+                if (window.callerCandidates) {
+                    for (const candidate of window.callerCandidates) {
+                        await calleePC.addIceCandidate(candidate);
+                    }
+                }
+                
+                if (window.calleeCandidates) {
+                    for (const candidate of window.calleeCandidates) {
+                        await callerPC.addIceCandidate(candidate);
+                    }
+                }
+                
+                updateStatus('calleeStatus', 'Answered', 'connecting');
+                
+            } catch (error) {
+                log('calleeLog', `❌ Error answering call: ${error.message}`);
+            }
+        }
+
+        function hangupCaller() {
+            if (callerPC) {
+                callerPC.close();
+                callerPC = null;
+            }
+            if (callerStream) {
+                callerStream.getTracks().forEach(track => track.stop());
+                callerStream = null;
+            }
+            updateStatus('callerStatus', 'Disconnected', 'disconnected');
+            document.getElementById('startCallBtn').disabled = true;
+            document.getElementById('hangupCallerBtn').disabled = true;
+            log('callerLog', 'Caller hung up');
+        }
+
+        function hangupCallee() {
+            if (calleePC) {
+                calleePC.close();
+                calleePC = null;
+            }
+            if (calleeStream) {
+                calleeStream.getTracks().forEach(track => track.stop());
+                calleeStream = null;
+            }
+            updateStatus('calleeStatus', 'Disconnected', 'disconnected');
+            document.getElementById('answerCallBtn').disabled = true;
+            document.getElementById('hangupCalleeBtn').disabled = true;
+            log('calleeLog', 'Callee hung up');
+        }
+
+        // Auto-initialize on load
+        window.addEventListener('load', () => {
+            log('callerLog', 'Page loaded - ready for testing');
+            log('calleeLog', 'Page loaded - ready for testing');
+        });
+    </script>
+</body>
+</html> 
